@@ -1,0 +1,14 @@
+[project]
+name = "summarisation-poc"
+version = "0.1.0"
+description = "Sky's call summarisation POC"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.13.0",
+    "librosa>=0.11.0",
+    "mistral-common[audio,hf-hub]>=1.11.2",
+    "pyannote-audio>=3.3.0",
+    "torch>=2.12.0",
+    "transformers>=5.9.0",
+]
