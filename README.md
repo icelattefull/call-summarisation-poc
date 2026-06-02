@@ -5,6 +5,8 @@ This repository contains two local audio-to-text pipelines built on Hugging Face
 - `main.py` uses Voxtral for transcription and summarisation, with optional speaker diarization via `pyannote-audio`.
 - `vibevoice.py` uses VibeVoice-ASR for transcription with built-in speaker diarization and optional summarisation.
 
+Both scripts use a shared summarisation prompt from `assets/call_summarisation_prompt.md` by default. This prompt is designed for customer service call transcripts and includes rules for tone, structure, content inclusion/exclusion, and sensitive information handling. You can override it with `--summary-prompt`.
+
 Both scripts are intended to be run with `uv` and write a Markdown report into `outputs/` by default.
 
 ## What Each Script Does
@@ -185,6 +187,12 @@ Skip summarisation:
 uv run vibevoice.py ./assets/test_1.wav --no-summary
 ```
 
+Use a custom summary prompt:
+
+```bash
+uv run vibevoice.py ./assets/test_1.wav --summary-prompt ./my_prompt.md
+```
+
 ### Run `main.py`
 
 Basic example:
@@ -217,6 +225,12 @@ Write to a specific output file:
 uv run main.py ./assets/test_1.wav -o ./outputs/test_1_voxtral.md
 ```
 
+Use a custom summary prompt:
+
+```bash
+uv run main.py ./assets/test_1.wav --summary-prompt ./my_prompt.md
+```
+
 ## Common Options
 
 ### `main.py`
@@ -227,6 +241,7 @@ uv run main.py ./assets/test_1.wav -o ./outputs/test_1_voxtral.md
 - `--transcribe-chunk-seconds`: split transcription into audio chunks
 - `--transcribe-on-cpu`: run transcription on CPU
 - `--summary-on-cpu`: run summarisation on CPU
+- `--summary-prompt`: path to a custom summary prompt file (defaults to `assets/call_summarisation_prompt.md`)
 
 ### `vibevoice.py`
 
@@ -235,6 +250,7 @@ uv run main.py ./assets/test_1.wav -o ./outputs/test_1_voxtral.md
 - `--chunk-overlap-seconds`: add overlap between audio chunks
 - `--tokenizer-chunk-size`: reduce internal chunk size if you hit OOM on MPS
 - `--no-summary`: skip summary generation
+- `--summary-prompt`: path to a custom summary prompt file (defaults to `assets/call_summarisation_prompt.md`)
 
 ## Output
 

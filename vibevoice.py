@@ -329,6 +329,23 @@ def format_diarized_transcript(segments: List[Dict[str, Any]]) -> str:
 # Summarisation (text-only, using the same model's LLM backbone)
 # ---------------------------------------------------------------------------
 
+def load_summary_prompt(prompt_path: Optional[Path]) -> str:
+    """Load a summary prompt from a file. Falls back to a built-in default."""
+    if prompt_path is None:
+        prompt_path = Path(__file__).resolve().parent / "assets" / "call_summarisation_prompt.md"
+    prompt_path = prompt_path.expanduser().resolve()
+    if prompt_path.exists():
+        logger.info("Loaded summary prompt from %s", prompt_path)
+        return prompt_path.read_text(encoding="utf-8").strip()
+    logger.warning("Summary prompt file not found: %s — using built-in default", prompt_path)
+    return (
+        "Summarise the following transcript.\n\n"
+        "Return:\n"
+        "1) A 1-paragraph executive summary\n"
+        "2) 5-10 bullet points of key details"
+    )
+
+
 def chunk_text(text: str, chunk_chars: int, overlap: int) -> List[str]:
     text = text.strip()
     if not text:
@@ -394,6 +411,7 @@ def summarise(
     max_new_tokens: int,
     chunk_chars: int,
     chunk_overlap: int,
+    summary_prompt: str,
 ) -> str:
     logger.info("STAGE: summarisation")
     chunks = chunk_text(transcript, chunk_chars, chunk_overlap)
@@ -403,10 +421,7 @@ def summarise(
 
     if len(chunks) == 1:
         prompt = (
-            "Summarise the following transcript.\n\n"
-            "Return:\n"
-            "1) A 1-paragraph executive summary\n"
-            "2) 5-10 bullet points of key details\n\n"
+            f"{summary_prompt}\n\n"
             f"TRANSCRIPT:\n{chunks[0]}"
         )
         return generate_text_summary(model, processor, device, dtype, prompt, max_new_tokens)
@@ -415,7 +430,9 @@ def summarise(
     for i, chunk in enumerate(chunks, start=1):
         logger.info("Summarising chunk %d/%d", i, len(chunks))
         prompt = (
-            f"Summarise part {i}/{len(chunks)} of this transcript.\n\n"
+            f"{summary_prompt}\n\n"
+            f"Summarise part {i}/{len(chunks)} of this transcript "
+            "based on the instructions above. "
             "Return concise bullet points focusing on facts, names, dates, and key events.\n\n"
             f"TRANSCRIPT PART:\n{chunk}"
         )
@@ -423,12 +440,9 @@ def summarise(
 
     combined = "\n\n".join(f"PART {i+1} SUMMARY:\n{p}" for i, p in enumerate(partials))
     final_prompt = (
-        "You are given summaries of transcript chunks.\n"
-        "Produce a final consolidated summary.\n\n"
-        "Return:\n"
-        "1) A 1-paragraph executive summary\n"
-        "2) 8-15 bullet points of key details\n"
-        "3) (Optional) Action items if any are mentioned\n\n"
+        f"{summary_prompt}\n\n"
+        "You are given summaries of transcript chunks. "
+        "Produce a final consolidated summary based on the instructions above.\n\n"
         f"CHUNK SUMMARIES:\n{combined}"
     )
     return generate_text_summary(model, processor, device, dtype, final_prompt, max_new_tokens)
@@ -527,6 +541,12 @@ def main() -> None:
     ap.add_argument("--no-summary", action="store_true", help="Skip summarisation, only transcribe.")
     ap.add_argument("--chunk-chars", type=int, default=4000, help="Chars per summary text chunk")
     ap.add_argument("--chunk-overlap", type=int, default=200, help="Overlap between summary text chunks")
+    ap.add_argument(
+        "--summary-prompt",
+        type=Path,
+        default=None,
+        help="Path to summary prompt file. Defaults to assets/call_summarisation_prompt.md",
+    )
 
     # Device
     ap.add_argument(
@@ -643,6 +663,7 @@ def main() -> None:
     # Summarise
     summary = None
     if not args.no_summary:
+        summary_prompt_text = load_summary_prompt(args.summary_prompt)
         summary = summarise(
             model=model,
             processor=processor,
@@ -652,6 +673,7 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens_summary,
             chunk_chars=args.chunk_chars,
             chunk_overlap=args.chunk_overlap,
+            summary_prompt=summary_prompt_text,
         )
 
     # Write output file

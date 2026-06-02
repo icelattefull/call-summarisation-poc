@@ -236,6 +236,24 @@ def merge_adjacent_segments(
     return merged
 
 
+def load_summary_prompt(prompt_path: Optional[Path]) -> str:
+    """Load a summary prompt from a file. Falls back to a built-in default."""
+    if prompt_path is None:
+        # Default: look next to the script in assets/
+        prompt_path = Path(__file__).resolve().parent / "assets" / "call_summarisation_prompt.md"
+    prompt_path = prompt_path.expanduser().resolve()
+    if prompt_path.exists():
+        logger.info("Loaded summary prompt from %s", prompt_path)
+        return prompt_path.read_text(encoding="utf-8").strip()
+    logger.warning("Summary prompt file not found: %s — using built-in default", prompt_path)
+    return (
+        "Summarise the following transcript.\n\n"
+        "Return:\n"
+        "1) A 1-paragraph executive summary\n"
+        "2) 5-10 bullet points of key details"
+    )
+
+
 def chunk_text(text: str, chunk_chars: int, overlap: int) -> List[str]:
     text = text.strip()
     if not text:
@@ -648,6 +666,14 @@ def main() -> None:
         help="Output file path. Defaults to <audio_stem>_voxtral_<timestamp>.md",
     )
 
+    # Summary prompt
+    ap.add_argument(
+        "--summary-prompt",
+        type=Path,
+        default=None,
+        help="Path to summary prompt file. Defaults to assets/call_summarisation_prompt.md",
+    )
+
     # Logging
     ap.add_argument(
         "--log-level",
@@ -747,16 +773,14 @@ def main() -> None:
         model.to(summary_device)
         mps_cleanup("after move to summary_device")
 
+    summary_prompt = load_summary_prompt(args.summary_prompt)
     chunks = chunk_text(transcript, args.chunk_chars, args.chunk_overlap)
 
     if not chunks:
         summary = "(No transcript text to summarise.)"
     elif len(chunks) == 1:
         prompt = (
-            "Summarise the following transcript.\n\n"
-            "Return:\n"
-            "1) A 1-paragraph executive summary\n"
-            "2) 5-10 bullet points of key details\n\n"
+            f"{summary_prompt}\n\n"
             f"TRANSCRIPT:\n{chunks[0]}"
         )
         summary = generate_text(
@@ -772,7 +796,9 @@ def main() -> None:
         for i, chunk in enumerate(chunks, start=1):
             logger.info("Summarising transcript chunk %s/%s", i, len(chunks))
             prompt = (
-                f"Summarise part {i}/{len(chunks)} of this transcript.\n\n"
+                f"{summary_prompt}\n\n"
+                f"Summarise part {i}/{len(chunks)} of this transcript "
+                "based on the instructions above. "
                 "Return concise bullet points focusing on facts, names, dates, and key events.\n\n"
                 f"TRANSCRIPT PART:\n{chunk}"
             )
@@ -791,12 +817,9 @@ def main() -> None:
         )
 
         final_prompt = (
-            "You are given summaries of transcript chunks.\n"
-            "Produce a final consolidated summary.\n\n"
-            "Return:\n"
-            "1) A 1-paragraph executive summary\n"
-            "2) 8-15 bullet points of key details\n"
-            "3) (Optional) Action items if any are mentioned\n\n"
+            f"{summary_prompt}\n\n"
+            "You are given summaries of transcript chunks. "
+            "Produce a final consolidated summary based on the instructions above.\n\n"
             f"CHUNK SUMMARIES:\n{combined}"
         )
 
